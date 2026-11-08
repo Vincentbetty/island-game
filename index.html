@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>岛屿大冒险 · 四人策略游戏</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0f172a; --panel: #1e293b; --line: #334155;
+    --text: #e2e8f0; --muted: #94a3b8; --dim: #64748b;
+    --brand: #4ade80; --warn: #f87171; --gold: #fbbf24;
+  }
+  body {
+    min-height: 100vh; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    padding: 12px; display: flex; flex-direction: column; align-items: center;
+  }
+  h1 { font-size: 22px; margin-bottom: 4px; letter-spacing: 1px; }
+  .sub { font-size: 13px; color: var(--muted); margin-bottom: 14px; text-align: center; }
+
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center;
+    margin-bottom: 12px; background: var(--panel); padding: 10px 14px; border-radius: 12px;
+    border: 1px solid var(--line); max-width: 960px; width: 100%;
+  }
+  .turn-badge {
+    font-size: 15px; font-weight: 700; padding: 8px 14px; border-radius: 10px;
+    background: #0b1220; border: 1px solid var(--line); white-space: nowrap;
+  }
+  .turn-badge b { color: var(--gold); }
+  .dice-box { display: flex; align-items: center; gap: 8px; }
+  .dice-val {
+    width: 40px; height: 40px; border-radius: 8px; background: #0b1220;
+    border: 1px solid var(--line); display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 800; color: var(--gold);
+  }
+  .btn {
+    padding: 8px 14px; font-size: 14px; font-weight: 600; border: none; border-radius: 9px;
+    cursor: pointer; background: var(--brand); color: #0f172a; transition: .12s;
+  }
+  .btn:hover:not(:disabled) { filter: brightness(1.1); }
+  .btn:active:not(:disabled) { transform: scale(.97); }
+  .btn:disabled { background: var(--line); color: var(--dim); cursor: not-allowed; }
+  .btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  .btn.warn { background: var(--warn); color: #0f172a; }
+  .btn.blue { background: #3b82f6; color: #fff; }
+  .hint { font-size: 12px; color: var(--dim); }
+
+  .main { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; justify-content: center; max-width: 960px; width: 100%; }
+  .canvas-wrap { flex: 0 0 auto; }
+  canvas {
+    background: #1e293b; border-radius: 10px;
+    box-shadow: 0 0 0 2px var(--line), 0 10px 30px rgba(0,0,0,.5);
+    max-width: 100%; height: auto; cursor: pointer; display: block;
+  }
+  .side { flex: 1 1 300px; min-width: 280px; display: flex; flex-direction: column; gap: 12px; }
+
+  .players { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .pcard {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 10px; font-size: 12px; transition: .15s;
+  }
+  .pcard.active { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(74,222,128,.25); }
+  .pcard.dead { opacity: .45; }
+  .pcard .head { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; font-weight: 700; }
+  .pcard .dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; }
+  .pcard .dead-tag { color: var(--warn); font-size: 11px; margin-left: auto; }
+  .pcard .row { display: flex; justify-content: space-between; align-items: center; margin: 2px 0; }
+  .pcard .row .lab { color: var(--muted); }
+  .pcard .row .val { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .hpbar { height: 7px; border-radius: 4px; background: #0b1220; overflow: hidden; margin-top: 3px; }
+  .hpbar i { display: block; height: 100%; background: var(--brand); transition: width .2s; }
+  .pcard .weps { color: var(--muted); font-size: 12px; margin-top: 5px; min-height: 16px; }
+
+  .log {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 10px; font-size: 12px; color: var(--muted); height: 120px; overflow-y: auto;
+    line-height: 1.6;
+  }
+  .log div b { color: var(--text); }
+
+  .attackbar {
+    display: none; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center;
+    background: rgba(248,113,113,.12); border: 1px solid var(--warn);
+    padding: 10px 14px; border-radius: 10px; margin-bottom: 12px; width: 100%; max-width: 960px;
+  }
+  .attackbar.show { display: flex; }
+  .attackbar .lbl { color: var(--warn); font-weight: 700; font-size: 14px; }
+  .wep-btn {
+    padding: 7px 12px; font-size: 13px; font-weight: 600; border-radius: 8px; cursor: pointer;
+    background: #0b1220; color: var(--text); border: 1px solid var(--line);
+  }
+  .wep-btn.sel { border-color: var(--warn); color: var(--warn); }
+
+  .modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex;
+    align-items: center; justify-content: center; z-index: 50; padding: 16px;
+  }
+  .modal.hidden, .overlay.hidden { display: none; }
+  .modal .box {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px; width: 100%; max-width: 460px; max-height: 86vh; overflow-y: auto;
+  }
+  .modal h2 { font-size: 17px; margin-bottom: 12px; }
+  .shop-item {
+    display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 9px;
+    background: #0b1220; border: 1px solid var(--line); margin-bottom: 8px;
+  }
+  .shop-item .name { font-weight: 700; min-width: 64px; }
+  .shop-item .meta { color: var(--muted); font-size: 12px; flex: 1; }
+  .shop-item .owned { color: var(--gold); font-size: 12px; }
+  .shop-item .cost { color: var(--brand); font-weight: 700; white-space: nowrap; }
+
+  .overlay {
+    position: fixed; inset: 0; background: rgba(15,23,42,.88); z-index: 60;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  }
+  .overlay h2 { font-size: 30px; color: var(--gold); }
+  .overlay p { color: var(--muted); font-size: 15px; }
+
+  .legend { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: center; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .sw { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
+
+  @media (max-width: 720px) {
+    .players { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+  <h1>岛屿大冒险</h1>
+  <p class="sub">20 × 15 网格 · 掷骰子移动 · 挖矿赚钱 · 购买武器互相攻击 · 最后存活者获胜</p>
+
+  <div class="controls">
+    <div class="turn-badge">当前回合：<b id="turnName">玩家1</b></div>
+    <div class="dice-box">
+      <button class="btn blue" id="rollBtn">掷骰子</button>
+      <div class="dice-val" id="diceVal">-</div>
+      <span class="hint" id="moveHint">尚未掷骰子</span>
+    </div>
+    <button class="btn" id="digBtn">挖掘（-1 行动力）</button>
+    <button class="btn" id="buyBtn">购买</button>
+    <button class="btn warn" id="attackBtn">攻击（-1 行动力）</button>
+    <button class="btn ghost" id="endBtn">结束回合</button>
+  </div>
+
+  <div class="attackbar" id="attackBar">
+    <span class="lbl">选择武器，然后点击地图上的敌人：</span>
+    <span id="wepBtns"></span>
+    <button class="btn ghost" id="cancelAttack">取消攻击</button>
+  </div>
+
+  <div class="main">
+    <div class="canvas-wrap">
+      <canvas id="map"></canvas>
+    </div>
+    <div class="side">
+      <div class="players" id="playersPanel"></div>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <div class="legend" id="legend"></div>
+
+  <!-- 购买弹窗 -->
+  <div class="modal hidden" id="buyModal">
+    <div class="box">
+      <h2 id="buyTitle">购买</h2>
+      <div id="shopList"></div>
+      <button class="btn ghost" id="closeBuy" style="width:100%;margin-top:6px">关闭</button>
+    </div>
+  </div>
+
+  <!-- 开始弹窗 -->
+  <div class="overlay" id="startOverlay">
+    <h2>岛屿大冒险</h2>
+    <p>四人本地轮流 · 掷骰子移动 · 挖矿赚钱 · 购买武器 · 最后存活者获胜</p>
+    <button class="btn" id="startBtn" style="font-size:16px;padding:12px 30px">开始游戏</button>
+  </div>
+
+  <!-- 胜利弹窗 -->
+  <div class="overlay hidden" id="winOverlay">
+    <h2 id="winTitle"></h2>
+    <p id="winMsg"></p>
+    <button class="btn" id="restartBtn" style="font-size:16px;padding:12px 30px">重新开始</button>
+  </div>
+
+<script>
+(() => {
+  const W = 20, H = 15, CELL = 24;
+  const canvas = document.getElementById('map');
+  const ctx = canvas.getContext('2d');
+  canvas.width = W * CELL;
+  canvas.height = H * CELL;
+
+  const OCEAN = '#3b82c4';      // 海洋（水域，挖矿概率最低）
+  const ISLAND = '#6fbf73';     // 中央岛屿（挖矿概率最高）
+
+  // 资源（对应货币，单位：万）
+  const RESOURCES = [
+    { name: '煤矿', value: 1, color: '#94a3b8' },
+    { name: '铜矿', value: 2, color: '#d97706' },
+    { name: '榴石', value: 3, color: '#ef4444' },
+    { name: '宝石', value: 4, color: '#10b981' },
+    { name: '水晶', value: 5, color: '#38bdf8' },
+    { name: '钻石', value: 6, color: '#67e8f9' },
+  ];
+
+  // 武器系统：成本(万) / 攻击距离(格) / 攻击力
+  const WEAPONS = [
+    { name: '斧头',   cost: 5,  range: 1, dmg: 1 },
+    { name: '手榴弹', cost: 10, range: 3, dmg: 2 },
+    { name: '枪',     cost: 15, range: 5, dmg: 3 },
+    { name: '大炮',   cost: 30, range: 8, dmg: 5 },
+  ];
+
+  const BREAD = { name: '面包', cost: 1, ap: 2 };  // 1万恢复2点行动力
+
+  // 四名玩家（顺时针）：玩家1左上 → 玩家2右上 → 玩家3右下 → 玩家4左下
+  // bx0/by0 ~ bx1/by1 为 3×3 出生地；出生点即水晶所在角落
+  const players = [
+    { name: '玩家1', color: '#ef4444', dark: '#b91c1c', x: 0,  y: 0,  bx0: 0,  by0: 0,  bx1: 2,  by1: 2,  money: 0, ap: 5, hp: 10, weapons: [0,0,0,0], alive: true, takenTurn: false },
+    { name: '玩家2', color: '#3b82f6', dark: '#1d4ed8', x: 19, y: 0,  bx0: 17, by0: 0,  bx1: 19, by1: 2,  money: 0, ap: 5, hp: 10, weapons: [0,0,0,0], alive: true, takenTurn: false },
+    { name: '玩家3', color: '#a855f7', dark: '#7e22ce', x: 19, y: 14, bx0: 17, by0: 12, bx1: 19, by1: 14, money: 0, ap: 5, hp: 10, weapons: [0,0,0,0], alive: true, takenTurn: false },
+    { name: '玩家4', color: '#f59e0b', dark: '#b45309', x: 0,  y: 14, bx0: 0,  by0: 12, bx1: 2,  by1: 14, money: 0, ap: 5, hp: 10, weapons: [0,0,0,0], alive: true, takenTurn: false },
+  ];
+
+  // 每个格子的挖掘状态
+  const board = [];
+  for (let y = 0; y < H; y++) {
+    board[y] = [];
+    for (let x = 0; x < W; x++) board[y][x] = { dug: false, resource: null };
+  }
+
+  // 游戏状态
+  let current = 0;
+  let phase = 'awaitRoll';   // awaitRoll | acting | attack
+  let diceValue = 0;
+  let moveLeft = 0;
+  let selectedWeapon = 0;
+  let gameOver = false;
+  let winner = null;
+
+  // ---------- 地图地形 ----------
+  function isIsland(x, y) {
+    const dx = (x - 9.5) / 6;
+    const dy = (y - 7) / 4;
+    return dx * dx + dy * dy <= 1;
+  }
+  function ownerOfBase(x, y) {
+    for (const p of players) {
+      if (x >= p.bx0 && x <= p.bx1 && y >= p.by0 && y <= p.by1) return p;
+    }
+    return null;
+  }
+  function terrain(x, y) {
+    if (ownerOfBase(x, y)) return 'base';
+    if (isIsland(x, y)) return 'island';
+    return 'ocean';
+  }
+
+  // ---------- 挖矿：按地形不同概率 ----------
+  function rollResource(x, y) {
+    const t = terrain(x, y);
+    let find, weights; // 权重对应 [煤,铜,榴石,宝石,水晶,钻石]
+    if (t === 'island')      { find = 0.85; weights = [10, 15, 25, 25, 15, 10]; }
+    else if (t === 'base')   { find = 0.65; weights = [30, 30, 20, 12,  6,  2]; }
+    else                     { find = 0.45; weights = [55, 30, 10,  4,  1,  0]; }
+    if (Math.random() > find) return null;
+    const total = weights.reduce((a, b) => a + b, 0);
+    let r = Math.random() * total;
+    for (let i = 0; i < weights.length; i++) {
+      r -= weights[i];
+      if (r < 0) return RESOURCES[i];
+    }
+    return RESOURCES[RESOURCES.length - 1];
+  }
+
+  function darken(hex, f = 0.5) {
+    const n = parseInt(hex.slice(1), 16);
+    let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    r = Math.round(r * f); g = Math.round(g * f); b = Math.round(b * f);
+    return `rgb(${r},${g},${b})`;
+  }
+
+  // ---------- 距离（切比雪夫距离，即“格”数） ----------
+  function dist(a, b) { return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)); }
+  function isAdjacent(x, y, px, py) { return Math.max(Math.abs(x - px), Math.abs(y - py)) === 1; }
+
+  // ---------- 日志 ----------
+  const logEl = document.getElementById('log');
+  function log(msg) {
+    const div = document.createElement('div');
+    div.innerHTML = msg;
+    logEl.prepend(div);
+    while (logEl.children.length > 60) logEl.removeChild(logEl.lastChild);
+  }
+
+  // ---------- 回合流程 ----------
+  function startTurn() {
+    const p = players[current];
+    if (p.takenTurn) p.ap += 1;   // 每回合自动获取 1 点行动力
+    p.takenTurn = true;
+    diceValue = 0; moveLeft = 0; phase = 'awaitRoll'; selectedWeapon = 0;
+    log(`—— <b>${p.name}</b> 的回合（每回合行动力 +1）——`);
+    render();
+  }
+
+  function roll() {
+    if (phase !== 'awaitRoll' || gameOver) return;
+    diceValue = Math.floor(Math.random() * 6) + 1;
+    moveLeft = diceValue;
+    phase = 'acting';
+    log(`${players[current].name} 掷出了 <b>${diceValue}</b> 点`);
+    render();
+  }
+
+  function moveTo(x, y) {
+    const p = players[current];
+    if (phase !== 'acting' || moveLeft <= 0) return;
+    if (!isAdjacent(x, y, p.x, p.y)) return;
+    p.x = x; p.y = y; moveLeft--;
+    log(`${p.name} 移动到 (${x}, ${y})，剩余步数 ${moveLeft}`);
+    render();
+  }
+
+  function dig() {
+    if (phase !== 'acting' || gameOver) return;
+    const p = players[current];
+    const cell = board[p.y][p.x];
+    if (cell.dug) { log('这个格子已经挖过了'); return; }
+    if (p.ap < 1) { log('行动力不足'); return; }
+    p.ap -= 1;
+    cell.dug = true;
+    const r = rollResource(p.x, p.y);
+    if (r) {
+      p.money += r.value;
+      cell.resource = r;
+      log(`${p.name} 挖到了 <b style="color:${r.color}">${r.name}</b>（+${r.value} 万）`);
+    } else {
+      log(`${p.name} 什么都没挖到`);
+    }
+    render();
+  }
+
+  function buyWeapon(i) {
+    if (gameOver) return;
+    const p = players[current];
+    const w = WEAPONS[i];
+    if (p.money < w.cost) { log('货币不足'); return; }
+    p.money -= w.cost;
+    p.weapons[i]++;
+    log(`${p.name} 购买了 <b>${w.name}</b>（-${w.cost} 万）`);
+    render();
+  }
+
+  function buyBread() {
+    if (gameOver) return;
+    const p = players[current];
+    if (p.money < BREAD.cost) { log('货币不足'); return; }
+    p.money -= BREAD.cost;
+    p.ap += BREAD.ap;
+    log(`${p.name} 购买了 <b>面包</b>（-${BREAD.cost} 万，行动力 +${BREAD.ap}）`);
+    render();
+  }
+
+  function toggleAttack() {
+    if (gameOver) return;
+    const p = players[current];
+    if (phase === 'attack') { phase = 'acting'; render(); return; }
+    if (phase !== 'acting') return;
+    if (p.weapons.every(c => c === 0)) { log('还没有武器，无法攻击'); return; }
+    selectedWeapon = p.weapons.findIndex(c => c > 0);
+    phase = 'attack';
+    log(`${p.name} 进入攻击模式，选择武器并点击敌人`);
+    render();
+  }
+
+  function selectWeapon(i) {
+    selectedWeapon = i;
+    render();
+  }
+
+  function doAttack(target) {
+    const p = players[current];
+    const w = WEAPONS[selectedWeapon];
+    const d = dist(p, target);
+    if (d > w.range) { log(`${target.name} 不在 ${w.name} 的攻击范围内`); return; }
+    if (p.ap < 1) { log('行动力不足'); return; }
+    if (p.weapons[selectedWeapon] <= 0) { log('没有该武器'); return; }
+    p.ap -= 1;
+    p.weapons[selectedWeapon]--;   // 武器一次性使用，使用后消耗
+    target.hp -= w.dmg;
+    log(`${p.name} 用 <b>${w.name}</b> 攻击 ${target.name}，造成 <b>${w.dmg}</b> 点伤害（该武器已消耗）`);
+    if (target.hp <= 0) {
+      target.hp = 0; target.alive = false;
+      log(`<b>${target.name} 生命值归零，游戏结束！</b>`);
+      checkWin();
+    }
+    phase = 'acting';
+    render();
+  }
+
+  function checkWin() {
+    const alive = players.filter(p => p.alive);
+    if (alive.length <= 1) {
+      gameOver = true;
+      winner = alive[0] || null;
+      document.getElementById('winTitle').textContent = winner ? `${winner.name} 获胜！` : '平局';
+      document.getElementById('winMsg').textContent = '所有其他玩家都已被淘汰';
+      document.getElementById('winOverlay').classList.remove('hidden');
+    }
+  }
+
+  function endTurn() {
+    if (gameOver) return;
+    let next = current;
+    for (let i = 1; i <= 4; i++) {
+      const idx = (current + i) % 4;
+      if (players[idx].alive) { next = idx; break; }
+    }
+    current = next;
+    phase = 'ended';
+    startTurn();
+  }
+
+  // ---------- 画布渲染 ----------
+  function render() {
+    const p = players[current];
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 格子
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const t = terrain(x, y);
+        let fill = OCEAN;
+        if (t === 'island') fill = ISLAND;
+        else if (t === 'base') fill = ownerOfBase(x, y).color;
+        if (board[y][x].dug) fill = darken(fill, 0.5);
+        ctx.fillStyle = fill;
+        ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+        // 挖出资源的小点
+        if (board[y][x].dug && board[y][x].resource) {
+          ctx.fillStyle = board[y][x].resource.color;
+          ctx.beginPath();
+          ctx.arc(x * CELL + CELL - 5, y * CELL + 5, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    // 可移动格子高亮
+    if (phase === 'acting' && moveLeft > 0) {
+      ctx.fillStyle = 'rgba(255,255,255,.18)';
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const nx = p.x + dx, ny = p.y + dy;
+        if (nx >= 0 && nx < W && ny >= 0 && ny < H) ctx.fillRect(nx * CELL, ny * CELL, CELL, CELL);
+      }
+    }
+
+    // 攻击范围高亮（可攻击的敌人）
+    if (phase === 'attack') {
+      const w = WEAPONS[selectedWeapon];
+      ctx.strokeStyle = 'rgba(248,113,113,.85)';
+      ctx.lineWidth = 2;
+      players.forEach(q => {
+        if (q.alive && q !== p && dist(p, q) <= w.range) {
+          ctx.beginPath();
+          ctx.arc(q.x * CELL + CELL / 2, q.y * CELL + CELL / 2, CELL * 0.52, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      });
+    }
+
+    // 网格线
+    ctx.strokeStyle = 'rgba(15,23,42,.25)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= W; x++) { ctx.beginPath(); ctx.moveTo(x * CELL, 0); ctx.lineTo(x * CELL, H * CELL); ctx.stroke(); }
+    for (let y = 0; y <= H; y++) { ctx.beginPath(); ctx.moveTo(0, y * CELL); ctx.lineTo(W * CELL, y * CELL); ctx.stroke(); }
+
+    // 角落水晶（出生地基地标记）
+    players.forEach(pl => {
+      const cx = pl.bx0 * CELL + CELL / 2, cy = pl.by0 * CELL + CELL / 2;
+      const r = CELL * 0.34;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy); ctx.lineTo(cx, cy + r); ctx.lineTo(cx - r, cy);
+      ctx.closePath();
+      ctx.fillStyle = '#fff';
+      ctx.fill();
+      ctx.strokeStyle = pl.dark;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    });
+
+    // 玩家棋子
+    players.forEach((pl, i) => {
+      const cx = pl.x * CELL + CELL / 2, cy = pl.y * CELL + CELL / 2;
+      if (!pl.alive) {
+        ctx.fillStyle = '#334155';
+        ctx.beginPath(); ctx.arc(cx, cy, CELL * 0.4, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#0b1220'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.fillStyle = '#94a3b8'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('✕', cx, cy);
+        return;
+      }
+      ctx.beginPath(); ctx.arc(cx, cy, CELL * 0.4, 0, Math.PI * 2);
+      ctx.fillStyle = pl.color; ctx.fill();
+      ctx.strokeStyle = (i === current && !gameOver) ? '#fff' : pl.dark;
+      ctx.lineWidth = (i === current && !gameOver) ? 3 : 2;
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(i + 1), cx, cy);
+    });
+
+    renderPanels();
+    renderControls();
+  }
+
+  // ---------- 玩家面板 ----------
+  function renderPanels() {
+    const el = document.getElementById('playersPanel');
+    el.innerHTML = '';
+    players.forEach((p, i) => {
+      const card = document.createElement('div');
+      card.className = 'pcard' + (i === current && !gameOver ? ' active' : '') + (!p.alive ? ' dead' : '');
+      const weps = WEAPONS.map((w, wi) => p.weapons[wi] > 0 ? `${w.name}×${p.weapons[wi]}` : '').filter(Boolean).join('、');
+      card.innerHTML = `
+        <div class="head">
+          <span class="dot" style="background:${p.color}"></span>
+          ${p.name}
+          ${!p.alive ? '<span class="dead-tag">已淘汰</span>' : ''}
+        </div>
+        <div class="row"><span class="lab">货币</span><span class="val">${p.money} 万</span></div>
+        <div class="row"><span class="lab">行动力</span><span class="val">${p.ap}</span></div>
+        <div class="row"><span class="lab">生命值</span><span class="val">${p.hp} / 10</span></div>
+        <div class="hpbar"><i style="width:${Math.max(0, p.hp / 10 * 100)}%;background:${p.color}"></i></div>
+        <div class="weps">${weps ? '武器：' + weps : '暂无武器'}</div>
+      `;
+      el.appendChild(card);
+    });
+  }
+
+  // ---------- 控制按钮状态 ----------
+  function renderControls() {
+    document.getElementById('turnName').textContent = players[current].name;
+    document.getElementById('turnName').style.color = players[current].color;
+    document.getElementById('diceVal').textContent = diceValue || '-';
+    document.getElementById('moveHint').textContent =
+      (phase === 'awaitRoll') ? '尚未掷骰子'
+      : (phase === 'acting') ? `剩余步数：${moveLeft}`
+      : (phase === 'attack') ? '攻击模式中';
+    document.getElementById('rollBtn').disabled = (phase !== 'awaitRoll' || gameOver);
+    document.getElementById('digBtn').disabled = (phase !== 'acting' || gameOver);
+    document.getElementById('buyBtn').disabled = (phase !== 'acting' || gameOver);
+    document.getElementById('attackBtn').disabled = (phase !== 'acting' && phase !== 'attack') || gameOver;
+    document.getElementById('endBtn').disabled = gameOver;
+    document.getElementById('attackBar').classList.toggle('show', phase === 'attack');
+
+    // 攻击模式的武器选择
+    const wp = document.getElementById('wepBtns');
+    wp.innerHTML = '';
+    if (phase === 'attack') {
+      const p = players[current];
+      WEAPONS.forEach((w, i) => {
+        if (p.weapons[i] <= 0) return;
+        const b = document.createElement('button');
+        b.className = 'wep-btn' + (i === selectedWeapon ? ' sel' : '');
+        b.textContent = `${w.name}(距${w.range} 攻${w.dmg}) ×${p.weapons[i]}`;
+        b.onclick = () => selectWeapon(i);
+        wp.appendChild(b);
+      });
+    }
+  }
+
+  // ---------- 购买弹窗 ----------
+  function openShop() {
+    if (gameOver || phase !== 'acting') return;
+    const p = players[current];
+    document.getElementById('buyTitle').textContent = `${p.name} 的商店（当前货币 ${p.money} 万）`;
+    const list = document.getElementById('shopList');
+    list.innerHTML = '';
+    WEAPONS.forEach((w, i) => {
+      const item = document.createElement('div');
+      item.className = 'shop-item';
+      item.innerHTML = `
+        <span class="name">${w.name}</span>
+        <span class="meta">攻击距离 ${w.range} 格 · 攻击力 ${w.dmg} · 一次性</span>
+        <span class="owned">已拥有 ×${p.weapons[i]}</span>
+        <span class="cost">${w.cost} 万</span>
+        <button class="btn" ${p.money < w.cost ? 'disabled' : ''} onclick="window._buyW(${i})">购买</button>
+      `;
+      list.appendChild(item);
+    });
+    const bread = document.createElement('div');
+    bread.className = 'shop-item';
+    bread.innerHTML = `
+      <span class="name">面包</span>
+      <span class="meta">恢复 2 点行动力</span>
+      <span class="cost">1 万</span>
+      <button class="btn" ${p.money < BREAD.cost ? 'disabled' : ''} onclick="window._buyB()">购买</button>
+    `;
+    list.appendChild(bread);
+    document.getElementById('buyModal').classList.remove('hidden');
+  }
+
+  // ---------- 事件绑定 ----------
+  document.getElementById('rollBtn').onclick = roll;
+  document.getElementById('digBtn').onclick = dig;
+  document.getElementById('buyBtn').onclick = openShop;
+  document.getElementById('attackBtn').onclick = toggleAttack;
+  document.getElementById('endBtn').onclick = endTurn;
+  document.getElementById('cancelAttack').onclick = () => { phase = 'acting'; render(); };
+  document.getElementById('closeBuy').onclick = () => document.getElementById('buyModal').classList.add('hidden');
+  document.getElementById('restartBtn').onclick = () => location.reload();
+
+  // 暴露给内联 onclick
+  window._buyW = buyWeapon;
+  window._buyB = buyBread;
+
+  // 点击画布：移动 / 攻击
+  canvas.addEventListener('click', e => {
+    if (gameOver) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+    const gx = Math.floor(mx / CELL), gy = Math.floor(my / CELL);
+    if (gx < 0 || gx >= W || gy < 0 || gy >= H) return;
+    const p = players[current];
+    if (phase === 'acting') {
+      moveTo(gx, gy);
+    } else if (phase === 'attack') {
+      const target = players.find(q => q.alive && q !== p && q.x === gx && q.y === gy);
+      if (target) doAttack(target);
+      else { log('请点击一个敌人'); }
+    }
+  });
+
+  // 键盘移动（方向键）
+  window.addEventListener('keydown', e => {
+    if (gameOver || phase !== 'acting') return;
+    const p = players[current];
+    const map = { ArrowUp: [0,-1], ArrowDown: [0,1], ArrowLeft: [-1,0], ArrowRight: [1,0] };
+    const d = map[e.key];
+    if (d) {
+      e.preventDefault();
+      moveTo(p.x + d[0], p.y + d[1]);
+    }
+  });
+
+  // 图例
+  const legend = document.getElementById('legend');
+  const legItems = [
+    { label: '海洋（低概率）', color: OCEAN },
+    { label: '中央岛屿（高概率）', color: ISLAND },
+    ...players.map(p => ({ label: p.name + ' 出生地（中概率）', color: p.color })),
+    { label: '已挖过的格子', color: '#0b1220' },
+  ];
+  legItems.forEach(it => {
+    const s = document.createElement('span');
+    const sw = document.createElement('span');
+    sw.className = 'sw';
+    sw.style.background = it.color;
+    s.appendChild(sw);
+    s.appendChild(document.createTextNode(it.label));
+    legend.appendChild(s);
+  });
+
+  // ---------- 初始化 ----------
+  render();   // 先渲染出棋盘，等待玩家点击“开始游戏”
+  document.getElementById('startBtn').onclick = () => {
+    document.getElementById('startOverlay').classList.add('hidden');
+    log('游戏开始！按顺时针依次行动：玩家1 → 玩家2 → 玩家3 → 玩家4');
+    startTurn();
+  };
+})();
+</script>
+</body>
+</html>
