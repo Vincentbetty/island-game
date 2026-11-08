@@ -128,6 +128,56 @@
   .legend span { display: inline-flex; align-items: center; gap: 5px; }
   .sw { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
 
+  /* 开局坠落动画 */
+  .intro { position: fixed; inset: 0; z-index: 70; overflow: hidden; pointer-events: none; }
+  .intro.hidden { display: none; }
+  .intro .sky { position: absolute; inset: 0; background: linear-gradient(#38bdf8 0%, #93c5fd 45%, #e0f2fe 100%); }
+  .intro .cloud { position: absolute; background: #fff; border-radius: 999px; opacity: .85; }
+  .intro .cloud::before, .intro .cloud::after { content: ''; position: absolute; background: #fff; border-radius: 50%; }
+  .intro .c1 { width: 180px; height: 56px; top: 22%; left: -60px; animation: cloudDrift 3s linear infinite; }
+  .intro .c1::before { width: 70px; height: 70px; left: 30px; top: -34px; }
+  .intro .c1::after { width: 90px; height: 90px; left: 80px; top: -40px; }
+  .intro .c2 { width: 150px; height: 46px; top: 46%; right: -60px; animation: cloudDrift 4s linear infinite reverse; }
+  .intro .c2::before { width: 60px; height: 60px; left: 30px; top: -30px; }
+  .intro .c3 { width: 130px; height: 40px; top: 68%; left: 20%; animation: cloudDrift 3.5s linear infinite; }
+  .intro .c3::before { width: 50px; height: 50px; left: 30px; top: -26px; }
+  @keyframes cloudDrift { from { transform: translateX(-80px); } to { transform: translateX(130vw); } }
+  .intro .faller {
+    position: absolute; left: 50%; top: 0; width: 56px; height: 56px; margin-left: -28px;
+    background: #ef4444; border-radius: 50%; border: 3px solid #b91c1c;
+    box-shadow: 0 10px 22px rgba(0,0,0,.35);
+  }
+  .intro.play .sky { animation: skyFall 1.3s ease-in forwards; }
+  .intro.play .faller { animation: figureDrop 1.3s ease-in forwards; }
+  @keyframes skyFall {
+    0% { transform: translateY(0); opacity: 1; }
+    60% { opacity: 1; }
+    100% { transform: translateY(115%); opacity: 0; }
+  }
+  @keyframes figureDrop {
+    0% { transform: translateY(-80px) scale(1); }
+    50% { transform: translateY(40vh) scale(1.05); }
+    100% { transform: translateY(40vh) scale(.85); opacity: 0; }
+  }
+
+  /* 挖矿资源弹窗 */
+  .resource-toast {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(.5);
+    z-index: 80; pointer-events: none; text-align: center; opacity: 0;
+  }
+  .resource-toast.show { animation: rtPop 1.3s ease forwards; }
+  .rt-shape { width: 150px; height: 150px; margin: 0 auto; filter: drop-shadow(0 0 26px rgba(255,255,255,.5)); }
+  .rt-shape svg { width: 100%; height: 100%; }
+  .rt-name { font-size: 30px; font-weight: 800; color: #fff; margin-top: 8px; text-shadow: 0 2px 10px rgba(0,0,0,.55); }
+  .rt-value { font-size: 20px; color: var(--gold); font-weight: 700; margin-top: 4px; }
+  @keyframes rtPop {
+    0% { opacity: 0; transform: translate(-50%, -50%) scale(.4); }
+    18% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+    30% { transform: translate(-50%, -50%) scale(1); }
+    75% { opacity: 1; }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(1.05) translateY(-30px); }
+  }
+
   @media (max-width: 720px) {
     .players { grid-template-columns: 1fr 1fr; }
   }
@@ -197,6 +247,22 @@
     <button class="btn" id="restartBtn" style="font-size:16px;padding:12px 30px">重新开始</button>
   </div>
 
+  <!-- 开局坠落动画 -->
+  <div class="intro hidden" id="introOverlay">
+    <div class="sky"></div>
+    <div class="cloud c1"></div>
+    <div class="cloud c2"></div>
+    <div class="cloud c3"></div>
+    <div class="faller" id="introFaller"></div>
+  </div>
+
+  <!-- 挖矿资源弹窗 -->
+  <div class="resource-toast" id="resourceToast">
+    <div class="rt-shape" id="resourceShape"></div>
+    <div class="rt-name" id="resourceName"></div>
+    <div class="rt-value" id="resourceValue"></div>
+  </div>
+
 <script>
 (() => {
   const W = 20, H = 15, CELL = 24;
@@ -248,6 +314,9 @@
       bx0: BASE_SPOTS[spotIdx].bx0, by0: BASE_SPOTS[spotIdx].by0,
       bx1: BASE_SPOTS[spotIdx].bx1, by1: BASE_SPOTS[spotIdx].by1,
       money: 0, ap: 5, hp: 10, weapons: [0, 0, 0, 0], alive: true, takenTurn: false,
+      px: BASE_SPOTS[spotIdx].x * CELL + CELL / 2,
+      py: BASE_SPOTS[spotIdx].y * CELL + CELL / 2,
+      moving: false, legPhase: 0, mineAnim: 0,
     }));
     renderLegend();
   }
@@ -388,6 +457,12 @@
         noiseBurst(0.1, 0.15);
         break;
       case 'endTurn':  tone(300, 0.08, 'triangle', 0.14); break;
+      case 'win': {
+        const notes = [523, 659, 784, 1047, 784, 1047, 1318];
+        notes.forEach((f, i) => setTimeout(() => tone(f, 0.2, 'sine', 0.22), i * 120));
+        setTimeout(() => { tone(1318, 0.6, 'sine', 0.24); tone(1047, 0.6, 'triangle', 0.16); }, notes.length * 120);
+        break;
+      }
       case 'resource': {
         const f = [180, 260, 430, 1047, 1318, 1760][arg] || 600;
         tone(f, 0.16, 'sine', 0.2, f * 0.3);
@@ -443,6 +518,7 @@
     if (p.ap < 1) { log('行动力不足'); return; }
     p.ap -= 1;
     cell.dug = true;
+    p.mineAnim = 1;
     sfx('dig');
     const r = rollResource(p.x, p.y);
     if (r) {
@@ -450,6 +526,7 @@
       cell.resource = r;
       log(`${p.name} 挖到了 <b style="color:${r.color}">${r.name}</b>（+${r.value} 万）`);
       sfx('resource', RESOURCES.indexOf(r));
+      showResourceToast(r);
     } else {
       log(`${p.name} 什么都没挖到`);
     }
@@ -507,6 +584,7 @@
     p.weapons[selectedWeapon]--;   // 武器一次性使用，使用后消耗
     target.hp -= w.dmg;
     log(`${p.name} 用 <b>${w.name}</b> 攻击 ${target.name}，造成 <b>${w.dmg}</b> 点伤害（该武器已消耗）`);
+    spawnAttackEffects(p, target, selectedWeapon);
     sfx('weapon', selectedWeapon);
     sfx('hurt');
     if (target.hp <= 0) {
@@ -526,6 +604,7 @@
       document.getElementById('winTitle').textContent = winner ? `${winner.name} 获胜！` : '平局';
       document.getElementById('winMsg').textContent = '所有其他玩家都已被淘汰';
       document.getElementById('winOverlay').classList.remove('hidden');
+      sfx('win');
     }
   }
 
@@ -543,32 +622,58 @@
     startTurn();
   }
 
-  // ---------- 画布渲染 ----------
-  function render() {
-    const p = players[current];
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // ---------- 动画 & 渲染 ----------
+  const effects = [];
+  let shake = 0;
+  let lastTs = 0, rafId = null, dirty = true;
 
-    // 格子
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        const t = terrain(x, y);
-        let fill = OCEAN;
-        if (t === 'island') fill = ISLAND;
-        else if (t === 'base') fill = ownerOfBase(x, y).color;
-        if (board[y][x].dug) fill = darken(fill, 0.5);
-        ctx.fillStyle = fill;
-        ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
-        // 挖出资源的小点
-        if (board[y][x].dug && board[y][x].resource) {
-          ctx.fillStyle = board[y][x].resource.color;
-          ctx.beginPath();
-          ctx.arc(x * CELL + CELL - 5, y * CELL + 5, 3, 0, Math.PI * 2);
-          ctx.fill();
-        }
+  // 资源模型（SVG，用于大屏幕中间弹窗）
+  const RESOURCE_SVG = [
+    '<svg viewBox="0 0 100 100"><polygon points="20,80 15,45 40,25 70,30 85,55 75,80 45,85" fill="#64748b"/><polygon points="20,80 45,85 40,25 15,45" fill="#475569"/></svg>',
+    '<svg viewBox="0 0 100 100"><polygon points="25,75 20,50 45,30 75,40 80,70 55,85" fill="#d97706"/><polygon points="25,75 55,85 45,30 20,50" fill="#92400e"/></svg>',
+    '<svg viewBox="0 0 100 100"><circle cx="50" cy="55" r="30" fill="#ef4444"/><polygon points="35,45 50,20 65,45 50,70" fill="#fca5a5"/></svg>',
+    '<svg viewBox="0 0 100 100"><polygon points="35,20 65,20 70,80 30,80" fill="#10b981"/><polygon points="35,20 50,20 50,80 30,80" fill="#34d399"/><polygon points="30,80 50,80 50,95 25,90" fill="#047857"/></svg>',
+    '<svg viewBox="0 0 100 100"><polygon points="50,15 70,45 50,85 30,45" fill="#38bdf8"/><polygon points="50,15 60,45 50,85 40,45" fill="#bae6fd"/></svg>',
+    '<svg viewBox="0 0 100 100"><polygon points="50,10 80,35 50,90 20,35" fill="#67e8f9"/><polygon points="50,10 80,35 50,50 20,35" fill="#e0f2fe"/><polygon points="20,35 50,50 50,90" fill="#7dd3fc"/><polygon points="80,35 50,50 50,90" fill="#38bdf8"/></svg>',
+  ];
+
+  function updateAnim(dt) {
+    players.forEach(pl => {
+      const tx = pl.x * CELL + CELL / 2, ty = pl.y * CELL + CELL / 2;
+      const dx = tx - pl.px, dy = ty - pl.py;
+      const d = Math.hypot(dx, dy);
+      if (d > 0.5) {
+        pl.moving = true;
+        const step = Math.min(d, CELL * 11 * dt);
+        pl.px += dx / d * step;
+        pl.py += dy / d * step;
+        pl.legPhase += dt * 13;
+      } else {
+        pl.px = tx; pl.py = ty; pl.moving = false; pl.legPhase = 0;
+      }
+      if (pl.mineAnim > 0) pl.mineAnim = Math.max(0, pl.mineAnim - dt / 0.4);
+    });
+    for (let i = effects.length - 1; i >= 0; i--) {
+      effects[i].t += dt;
+      if (effects[i].t >= effects[i].dur) effects.splice(i, 1);
+    }
+    shake = Math.max(0, shake - dt * 28);
+  }
+
+  function drawBoard(p) {
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const t = terrain(x, y);
+      let fill = OCEAN;
+      if (t === 'island') fill = ISLAND;
+      else if (t === 'base') fill = ownerOfBase(x, y).color;
+      if (board[y][x].dug) fill = darken(fill, 0.5);
+      ctx.fillStyle = fill;
+      ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+      if (board[y][x].dug && board[y][x].resource) {
+        ctx.fillStyle = board[y][x].resource.color;
+        ctx.beginPath(); ctx.arc(x * CELL + CELL - 5, y * CELL + 5, 3, 0, Math.PI * 2); ctx.fill();
       }
     }
-
-    // 可移动格子高亮
     if (phase === 'acting' && moveLeft > 0) {
       ctx.fillStyle = 'rgba(255,255,255,.18)';
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
@@ -577,64 +682,189 @@
         if (nx >= 0 && nx < W && ny >= 0 && ny < H) ctx.fillRect(nx * CELL, ny * CELL, CELL, CELL);
       }
     }
-
-    // 攻击范围高亮（可攻击的敌人）
     if (phase === 'attack') {
       const w = WEAPONS[selectedWeapon];
-      ctx.strokeStyle = 'rgba(248,113,113,.85)';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(248,113,113,.85)'; ctx.lineWidth = 2;
       players.forEach(q => {
         if (q.alive && q !== p && dist(p, q) <= w.range) {
-          ctx.beginPath();
-          ctx.arc(q.x * CELL + CELL / 2, q.y * CELL + CELL / 2, CELL * 0.52, 0, Math.PI * 2);
-          ctx.stroke();
+          ctx.beginPath(); ctx.arc(q.x * CELL + CELL / 2, q.y * CELL + CELL / 2, CELL * 0.52, 0, Math.PI * 2); ctx.stroke();
         }
       });
     }
-
-    // 网格线
-    ctx.strokeStyle = 'rgba(15,23,42,.25)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(15,23,42,.25)'; ctx.lineWidth = 1;
     for (let x = 0; x <= W; x++) { ctx.beginPath(); ctx.moveTo(x * CELL, 0); ctx.lineTo(x * CELL, H * CELL); ctx.stroke(); }
     for (let y = 0; y <= H; y++) { ctx.beginPath(); ctx.moveTo(0, y * CELL); ctx.lineTo(W * CELL, y * CELL); ctx.stroke(); }
-
-    // 角落水晶（出生地基地标记）
     players.forEach(pl => {
-      const cx = pl.bx0 * CELL + CELL / 2, cy = pl.by0 * CELL + CELL / 2;
-      const r = CELL * 0.34;
+      const cx = pl.bx0 * CELL + CELL / 2, cy = pl.by0 * CELL + CELL / 2, r = CELL * 0.34;
       ctx.beginPath();
       ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy); ctx.lineTo(cx, cy + r); ctx.lineTo(cx - r, cy);
       ctx.closePath();
-      ctx.fillStyle = '#fff';
-      ctx.fill();
-      ctx.strokeStyle = pl.dark;
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.fill();
+      ctx.strokeStyle = pl.dark; ctx.lineWidth = 2; ctx.stroke();
     });
+  }
 
-    // 玩家棋子
-    players.forEach((pl, i) => {
-      const cx = pl.x * CELL + CELL / 2, cy = pl.y * CELL + CELL / 2;
-      if (!pl.alive) {
-        ctx.fillStyle = '#334155';
-        ctx.beginPath(); ctx.arc(cx, cy, CELL * 0.4, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#0b1220'; ctx.lineWidth = 2; ctx.stroke();
-        ctx.fillStyle = '#94a3b8'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText('✕', cx, cy);
-        return;
+  function drawCharacter(pl, i) {
+    const cx = pl.px, cy = pl.py;
+    ctx.fillStyle = 'rgba(0,0,0,.22)';
+    ctx.beginPath(); ctx.ellipse(cx, cy + CELL * 0.34, CELL * 0.3, CELL * 0.09, 0, 0, Math.PI * 2); ctx.fill();
+
+    if (!pl.alive) {
+      ctx.fillStyle = '#334155';
+      ctx.beginPath(); ctx.arc(cx, cy, CELL * 0.4, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#0b1220'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = '#94a3b8'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('✕', cx, cy);
+      return;
+    }
+
+    const r = CELL * 0.4;
+    const active = (i === current && !gameOver);
+    // 腿（走路摆动）
+    const swing = pl.moving ? Math.sin(pl.legPhase) * CELL * 0.15 : 0;
+    ctx.strokeStyle = pl.dark; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(cx - CELL * 0.12, cy + r * 0.5); ctx.lineTo(cx - CELL * 0.12 + swing, cy + r + CELL * 0.12); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx + CELL * 0.12, cy + r * 0.5); ctx.lineTo(cx + CELL * 0.12 - swing, cy + r + CELL * 0.12); ctx.stroke();
+    // 身体
+    ctx.fillStyle = pl.color;
+    ctx.beginPath(); ctx.arc(cx, cy - r * 0.1, r * 0.9, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = active ? '#fff' : pl.dark;
+    ctx.lineWidth = active ? 3 : 2;
+    ctx.stroke();
+    // 头
+    ctx.fillStyle = '#fcd9b8';
+    ctx.beginPath(); ctx.arc(cx, cy - r * 0.95, r * 0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#334155'; ctx.lineWidth = 1; ctx.stroke();
+    // 编号
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(i + 1), cx, cy - r * 0.1);
+
+    // 挖矿动作：矿镐挥动
+    if (pl.mineAnim > 0) {
+      const prog = 1 - pl.mineAnim;
+      ctx.save();
+      ctx.translate(cx, cy - r * 0.1);
+      ctx.rotate(-1.4 + prog * 1.9);
+      ctx.strokeStyle = '#a16207'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(CELL * 0.75, 0); ctx.stroke();
+      ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(CELL * 0.75, 0, CELL * 0.28, -Math.PI / 2, Math.PI / 2); ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function drawPlayers() {
+    players.forEach((pl, i) => drawCharacter(pl, i));
+  }
+
+  function drawEffects() {
+    effects.forEach(e => {
+      const k = e.t / e.dur;
+      if (e.type === 'slash') {
+        ctx.save();
+        ctx.globalAlpha = 1 - k;
+        ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, CELL * (0.3 + k * 1.0), e.angle - 0.9 + k * 1.8, e.angle - 0.9 + k * 1.8 + 1.9);
+        ctx.stroke();
+        ctx.restore();
+      } else if (e.type === 'projectile') {
+        const x = e.x0 + (e.x1 - e.x0) * k;
+        const y = e.y0 + (e.y1 - e.y0) * k - Math.sin(k * Math.PI) * CELL * 2;
+        ctx.fillStyle = e.color;
+        ctx.beginPath(); ctx.arc(x, y, e.r, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,.3)'; ctx.lineWidth = 1; ctx.stroke();
+      } else if (e.type === 'explosion') {
+        const rr = e.maxR * (0.35 + 0.65 * k);
+        ctx.save();
+        ctx.globalAlpha = 1 - k;
+        const grd = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, rr);
+        grd.addColorStop(0, '#fff7cc');
+        grd.addColorStop(0.4, '#fbbf24');
+        grd.addColorStop(1, 'rgba(248,113,113,0)');
+        ctx.fillStyle = grd;
+        ctx.beginPath(); ctx.arc(e.x, e.y, rr, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      } else if (e.type === 'tracer') {
+        ctx.save();
+        ctx.globalAlpha = 1 - k;
+        ctx.strokeStyle = '#fde68a'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(e.x0, e.y0); ctx.lineTo(e.x1, e.y1); ctx.stroke();
+        ctx.restore();
+      } else if (e.type === 'spark') {
+        ctx.save();
+        ctx.globalAlpha = 1 - k;
+        ctx.fillStyle = '#fff';
+        for (let s = 0; s < 6; s++) {
+          const a = s / 6 * Math.PI * 2;
+          const rr = CELL * (0.1 + k * 0.55);
+          ctx.beginPath(); ctx.arc(e.x + Math.cos(a) * rr, e.y + Math.sin(a) * rr, 2, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
       }
-      ctx.beginPath(); ctx.arc(cx, cy, CELL * 0.4, 0, Math.PI * 2);
-      ctx.fillStyle = pl.color; ctx.fill();
-      ctx.strokeStyle = (i === current && !gameOver) ? '#fff' : pl.dark;
-      ctx.lineWidth = (i === current && !gameOver) ? 3 : 2;
-      ctx.stroke();
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(String(i + 1), cx, cy);
     });
+  }
 
-    renderPanels();
-    renderControls();
+  function drawCanvas() {
+    const p = players[current];
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    if (shake > 0) ctx.translate((Math.random() - 0.5) * shake * 2, (Math.random() - 0.5) * shake * 2);
+    drawBoard(p);
+    drawPlayers();
+    drawEffects();
+    ctx.restore();
+  }
+
+  function loop(ts) {
+    if (lastTs === 0) lastTs = ts;
+    const dt = Math.min(0.05, (ts - lastTs) / 1000);
+    lastTs = ts;
+    updateAnim(dt);
+    drawCanvas();
+    if (dirty) { renderPanels(); renderControls(); dirty = false; }
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function render() {
+    dirty = true;
+    if (rafId === null) {
+      lastTs = 0;
+      rafId = requestAnimationFrame(loop);
+    }
+  }
+
+  function spawnAttackEffects(from, to, wi) {
+    const x0 = from.px, y0 = from.py, x1 = to.px, y1 = to.py;
+    if (wi === 0) {
+      effects.push({ type: 'slash', t: 0, dur: 0.3, x: x1, y: y1, angle: Math.atan2(y1 - y0, x1 - x0) });
+    } else if (wi === 1) {
+      effects.push({ type: 'projectile', t: 0, dur: 0.5, x0, y0, x1, y1, color: '#16a34a', r: CELL * 0.16 });
+      setTimeout(() => { effects.push({ type: 'explosion', t: 0, dur: 0.5, x: x1, y: y1, maxR: CELL * 1.7 }); shake = Math.max(shake, 6); }, 250);
+    } else if (wi === 2) {
+      effects.push({ type: 'tracer', t: 0, dur: 0.12, x0, y0, x1, y1 });
+      effects.push({ type: 'spark', t: 0, dur: 0.2, x: x1, y: y1 });
+      shake = Math.max(shake, 2);
+    } else {
+      effects.push({ type: 'projectile', t: 0, dur: 0.4, x0, y0, x1, y1, color: '#111827', r: CELL * 0.28 });
+      setTimeout(() => { effects.push({ type: 'explosion', t: 0, dur: 0.7, x: x1, y: y1, maxR: CELL * 2.4 }); shake = Math.max(shake, 12); }, 200);
+    }
+  }
+
+  function showResourceToast(r) {
+    const toast = document.getElementById('resourceToast');
+    const idx = RESOURCES.indexOf(r);
+    document.getElementById('resourceShape').innerHTML = RESOURCE_SVG[idx] || '';
+    const nameEl = document.getElementById('resourceName');
+    nameEl.textContent = r.name;
+    nameEl.style.color = r.color;
+    document.getElementById('resourceValue').textContent = '+ ' + r.value + ' 万';
+    toast.classList.remove('show');
+    void toast.offsetWidth;
+    toast.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => toast.classList.remove('show'), 1300);
   }
 
   // ---------- 玩家面板 ----------
@@ -806,18 +1036,29 @@
   // 开始游戏
   document.getElementById('startBtn').onclick = () => {
     ensureAudio();
-    document.getElementById('startOverlay').classList.add('hidden');
-    setupPlayers(playerCount);
-    current = 0;
-    gameOver = false;
-    winner = null;
-    phase = 'awaitRoll';
-    diceValue = 0;
-    moveLeft = 0;
-    selectedWeapon = 0;
-    log('游戏开始！按顺时针依次行动：' + players.map(p => p.name).join(' → '));
     sfx('start');
-    startTurn();
+    document.getElementById('startOverlay').classList.add('hidden');
+    // 开局坠落动画
+    const intro = document.getElementById('introOverlay');
+    document.getElementById('introFaller').style.background = players[0].color;
+    document.getElementById('introFaller').style.borderColor = players[0].dark;
+    intro.classList.remove('hidden');
+    intro.classList.remove('play');
+    void intro.offsetWidth;
+    intro.classList.add('play');
+    setTimeout(() => {
+      intro.classList.add('hidden');
+      setupPlayers(playerCount);
+      current = 0;
+      gameOver = false;
+      winner = null;
+      phase = 'awaitRoll';
+      diceValue = 0;
+      moveLeft = 0;
+      selectedWeapon = 0;
+      log('游戏开始！按顺时针依次行动：' + players.map(p => p.name).join(' → '));
+      startTurn();
+    }, 1400);
   };
 })();
 </script>
