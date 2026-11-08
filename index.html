@@ -119,6 +119,11 @@
   .overlay h2 { font-size: 30px; color: var(--gold); }
   .overlay p { color: var(--muted); font-size: 15px; }
 
+  .player-select { display: flex; gap: 10px; align-items: center; margin: 4px 0 10px; }
+  .ps-label { color: var(--muted); font-size: 14px; }
+  .player-select .btn { padding: 8px 20px; font-size: 15px; }
+  .player-select .btn.sel { background: var(--brand); color: #0f172a; border-color: var(--brand); }
+
   .legend { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: center; font-size: 12px; color: var(--muted); }
   .legend span { display: inline-flex; align-items: center; gap: 5px; }
   .sw { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
@@ -175,7 +180,13 @@
   <!-- 开始弹窗 -->
   <div class="overlay" id="startOverlay">
     <h2>岛屿大冒险</h2>
-    <p>四人本地轮流 · 掷骰子移动 · 挖矿赚钱 · 购买武器 · 最后存活者获胜</p>
+    <p>本地轮流 · 掷骰子移动 · 挖矿赚钱 · 购买武器 · 最后存活者获胜</p>
+    <div class="player-select" id="playerSelect">
+      <span class="ps-label">玩家数量</span>
+      <button class="btn ghost sel" data-n="4">4 人</button>
+      <button class="btn ghost" data-n="3">3 人</button>
+      <button class="btn ghost" data-n="2">2 人</button>
+    </div>
     <button class="btn" id="startBtn" style="font-size:16px;padding:12px 30px">开始游戏</button>
   </div>
 
@@ -217,14 +228,30 @@
 
   const BREAD = { name: '面包', cost: 1, ap: 2 };  // 1万恢复2点行动力
 
-  // 四名玩家（顺时针）：玩家1左上 → 玩家2右上 → 玩家3右下 → 玩家4左下
+  // 四个出生地（四角，顺时针）：左上 → 右上 → 右下 → 左下
   // bx0/by0 ~ bx1/by1 为 3×3 出生地；出生点即水晶所在角落
-  const players = [
-    { name: '玩家1', color: '#ef4444', dark: '#b91c1c', x: 0,  y: 0,  bx0: 0,  by0: 0,  bx1: 2,  by1: 2,  money: 0, ap: 5, hp: 10, weapons: [0,0,0,0], alive: true, takenTurn: false },
-    { name: '玩家2', color: '#3b82f6', dark: '#1d4ed8', x: 19, y: 0,  bx0: 17, by0: 0,  bx1: 19, by1: 2,  money: 0, ap: 5, hp: 10, weapons: [0,0,0,0], alive: true, takenTurn: false },
-    { name: '玩家3', color: '#a855f7', dark: '#7e22ce', x: 19, y: 14, bx0: 17, by0: 12, bx1: 19, by1: 14, money: 0, ap: 5, hp: 10, weapons: [0,0,0,0], alive: true, takenTurn: false },
-    { name: '玩家4', color: '#f59e0b', dark: '#b45309', x: 0,  y: 14, bx0: 0,  by0: 12, bx1: 2,  by1: 14, money: 0, ap: 5, hp: 10, weapons: [0,0,0,0], alive: true, takenTurn: false },
+  const BASE_SPOTS = [
+    { x: 0,  y: 0,  bx0: 0,  by0: 0,  bx1: 2,  by1: 2,  color: '#ef4444', dark: '#b91c1c' },
+    { x: 19, y: 0,  bx0: 17, by0: 0,  bx1: 19, by1: 2,  color: '#3b82f6', dark: '#1d4ed8' },
+    { x: 19, y: 14, bx0: 17, by0: 12, bx1: 19, by1: 14, color: '#a855f7', dark: '#7e22ce' },
+    { x: 0,  y: 14, bx0: 0,  by0: 12, bx1: 2,  by1: 14, color: '#f59e0b', dark: '#b45309' },
   ];
+  let players = [];
+  function setupPlayers(count) {
+    // 2人取对角，3人取三角，4人取四角
+    const order = count === 2 ? [0, 2] : count === 3 ? [0, 1, 2] : [0, 1, 2, 3];
+    players = order.map((spotIdx, i) => ({
+      name: '玩家' + (i + 1),
+      color: BASE_SPOTS[spotIdx].color,
+      dark: BASE_SPOTS[spotIdx].dark,
+      x: BASE_SPOTS[spotIdx].x, y: BASE_SPOTS[spotIdx].y,
+      bx0: BASE_SPOTS[spotIdx].bx0, by0: BASE_SPOTS[spotIdx].by0,
+      bx1: BASE_SPOTS[spotIdx].bx1, by1: BASE_SPOTS[spotIdx].by1,
+      money: 0, ap: 5, hp: 10, weapons: [0, 0, 0, 0], alive: true, takenTurn: false,
+    }));
+    renderLegend();
+  }
+  setupPlayers(4); // 默认四人，先渲染出棋盘
 
   // 每个格子的挖掘状态
   const board = [];
@@ -264,9 +291,9 @@
   function rollResource(x, y) {
     const t = terrain(x, y);
     let find, weights; // 权重对应 [煤,铜,榴石,宝石,水晶,钻石]
-    if (t === 'island')      { find = 0.85; weights = [10, 15, 25, 25, 15, 10]; }
-    else if (t === 'base')   { find = 0.65; weights = [30, 30, 20, 12,  6,  2]; }
-    else                     { find = 0.45; weights = [55, 30, 10,  4,  1,  0]; }
+    if (t === 'island')      { find = 0.85; weights = [10, 15, 20, 35, 12,  8]; }
+    else if (t === 'base')   { find = 0.65; weights = [25, 28, 15, 22,  7,  3]; }
+    else                     { find = 0.45; weights = [50, 26,  8, 12,  3,  1]; }
     if (Math.random() > find) return null;
     const total = weights.reduce((a, b) => a + b, 0);
     let r = Math.random() * total;
@@ -297,6 +324,86 @@
     while (logEl.children.length > 60) logEl.removeChild(logEl.lastChild);
   }
 
+  // ---------- 音效系统（Web Audio 合成） ----------
+  let audioCtx = null;
+  function ensureAudio() {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) audioCtx = new AC();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+  function tone(freq, dur = 0.12, type = 'sine', vol = 0.2, slide = 0) {
+    const ctx = ensureAudio();
+    if (!ctx) return;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, ctx.currentTime);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), ctx.currentTime + dur);
+    g.gain.setValueAtTime(vol, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+    o.connect(g).connect(ctx.destination);
+    o.start();
+    o.stop(ctx.currentTime + dur + 0.02);
+  }
+  function noiseBurst(dur = 0.15, vol = 0.25) {
+    const ctx = ensureAudio();
+    if (!ctx) return;
+    const len = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const g = ctx.createGain();
+    g.gain.value = vol;
+    src.connect(g).connect(ctx.destination);
+    src.start();
+  }
+  function sfx(name, arg) {
+    switch (name) {
+      case 'start':
+        tone(523, 0.12, 'sine', 0.22);
+        setTimeout(() => tone(659, 0.12, 'sine', 0.22), 90);
+        setTimeout(() => tone(784, 0.2, 'sine', 0.22), 180);
+        break;
+      case 'turn':     tone(392, 0.1, 'triangle', 0.18); break;
+      case 'dice':
+        noiseBurst(0.08, 0.2);
+        setTimeout(() => noiseBurst(0.1, 0.18), 80);
+        break;
+      case 'move':     tone(240, 0.05, 'square', 0.08); break;
+      case 'dig':
+        noiseBurst(0.12, 0.3);
+        tone(110, 0.12, 'sine', 0.16, -40);
+        break;
+      case 'buy':
+        tone(880, 0.09, 'sine', 0.18);
+        setTimeout(() => tone(1318, 0.12, 'sine', 0.15), 70);
+        break;
+      case 'hurt':
+        tone(180, 0.2, 'sawtooth', 0.22, -90);
+        noiseBurst(0.1, 0.15);
+        break;
+      case 'endTurn':  tone(300, 0.08, 'triangle', 0.14); break;
+      case 'resource': {
+        const f = [180, 260, 430, 1047, 1318, 1760][arg] || 600;
+        tone(f, 0.16, 'sine', 0.2, f * 0.3);
+        if (arg >= 3) setTimeout(() => tone(f * 1.5, 0.18, 'sine', 0.18), 90);
+        break;
+      }
+      case 'weapon': {
+        if (arg === 0) { tone(150, 0.1, 'sawtooth', 0.22, -70); }
+        else if (arg === 1) { noiseBurst(0.2, 0.35); tone(90, 0.18, 'sine', 0.22, -40); }
+        else if (arg === 2) { tone(700, 0.08, 'square', 0.22, -500); noiseBurst(0.06, 0.2); }
+        else { noiseBurst(0.3, 0.4); tone(70, 0.28, 'sine', 0.25, -40); }
+        break;
+      }
+    }
+  }
+
   // ---------- 回合流程 ----------
   function startTurn() {
     const p = players[current];
@@ -304,6 +411,7 @@
     p.takenTurn = true;
     diceValue = 0; moveLeft = 0; phase = 'awaitRoll'; selectedWeapon = 0;
     log(`—— <b>${p.name}</b> 的回合（每回合行动力 +1）——`);
+    sfx('turn');
     render();
   }
 
@@ -313,6 +421,7 @@
     moveLeft = diceValue;
     phase = 'acting';
     log(`${players[current].name} 掷出了 <b>${diceValue}</b> 点`);
+    sfx('dice');
     render();
   }
 
@@ -322,6 +431,7 @@
     if (!isAdjacent(x, y, p.x, p.y)) return;
     p.x = x; p.y = y; moveLeft--;
     log(`${p.name} 移动到 (${x}, ${y})，剩余步数 ${moveLeft}`);
+    sfx('move');
     render();
   }
 
@@ -333,11 +443,13 @@
     if (p.ap < 1) { log('行动力不足'); return; }
     p.ap -= 1;
     cell.dug = true;
+    sfx('dig');
     const r = rollResource(p.x, p.y);
     if (r) {
       p.money += r.value;
       cell.resource = r;
       log(`${p.name} 挖到了 <b style="color:${r.color}">${r.name}</b>（+${r.value} 万）`);
+      sfx('resource', RESOURCES.indexOf(r));
     } else {
       log(`${p.name} 什么都没挖到`);
     }
@@ -352,6 +464,7 @@
     p.money -= w.cost;
     p.weapons[i]++;
     log(`${p.name} 购买了 <b>${w.name}</b>（-${w.cost} 万）`);
+    sfx('buy');
     render();
   }
 
@@ -362,6 +475,7 @@
     p.money -= BREAD.cost;
     p.ap += BREAD.ap;
     log(`${p.name} 购买了 <b>面包</b>（-${BREAD.cost} 万，行动力 +${BREAD.ap}）`);
+    sfx('buy');
     render();
   }
 
@@ -393,6 +507,8 @@
     p.weapons[selectedWeapon]--;   // 武器一次性使用，使用后消耗
     target.hp -= w.dmg;
     log(`${p.name} 用 <b>${w.name}</b> 攻击 ${target.name}，造成 <b>${w.dmg}</b> 点伤害（该武器已消耗）`);
+    sfx('weapon', selectedWeapon);
+    sfx('hurt');
     if (target.hp <= 0) {
       target.hp = 0; target.alive = false;
       log(`<b>${target.name} 生命值归零，游戏结束！</b>`);
@@ -415,13 +531,15 @@
 
   function endTurn() {
     if (gameOver) return;
+    const n = players.length;
     let next = current;
-    for (let i = 1; i <= 4; i++) {
-      const idx = (current + i) % 4;
+    for (let i = 1; i <= n; i++) {
+      const idx = (current + i) % n;
       if (players[idx].alive) { next = idx; break; }
     }
     current = next;
     phase = 'ended';
+    sfx('endTurn');
     startTurn();
   }
 
@@ -651,28 +769,54 @@
   });
 
   // 图例
-  const legend = document.getElementById('legend');
-  const legItems = [
-    { label: '海洋（低概率）', color: OCEAN },
-    { label: '中央岛屿（高概率）', color: ISLAND },
-    ...players.map(p => ({ label: p.name + ' 出生地（中概率）', color: p.color })),
-    { label: '已挖过的格子', color: '#0b1220' },
-  ];
-  legItems.forEach(it => {
-    const s = document.createElement('span');
-    const sw = document.createElement('span');
-    sw.className = 'sw';
-    sw.style.background = it.color;
-    s.appendChild(sw);
-    s.appendChild(document.createTextNode(it.label));
-    legend.appendChild(s);
-  });
+  function renderLegend() {
+    const legend = document.getElementById('legend');
+    legend.innerHTML = '';
+    const legItems = [
+      { label: '海洋（低概率）', color: OCEAN },
+      { label: '中央岛屿（高概率）', color: ISLAND },
+      ...players.map(p => ({ label: p.name + ' 出生地（中概率）', color: p.color })),
+      { label: '已挖过的格子', color: '#0b1220' },
+    ];
+    legItems.forEach(it => {
+      const s = document.createElement('span');
+      const sw = document.createElement('span');
+      sw.className = 'sw';
+      sw.style.background = it.color;
+      s.appendChild(sw);
+      s.appendChild(document.createTextNode(it.label));
+      legend.appendChild(s);
+    });
+  }
 
   // ---------- 初始化 ----------
+  let playerCount = 4;
   render();   // 先渲染出棋盘，等待玩家点击“开始游戏”
+
+  // 玩家数量选择
+  document.getElementById('playerSelect').querySelectorAll('button').forEach(btn => {
+    btn.onclick = () => {
+      playerCount = parseInt(btn.dataset.n, 10);
+      document.getElementById('playerSelect').querySelectorAll('button').forEach(b => b.classList.toggle('sel', b === btn));
+      setupPlayers(playerCount);
+      render();
+    };
+  });
+
+  // 开始游戏
   document.getElementById('startBtn').onclick = () => {
+    ensureAudio();
     document.getElementById('startOverlay').classList.add('hidden');
-    log('游戏开始！按顺时针依次行动：玩家1 → 玩家2 → 玩家3 → 玩家4');
+    setupPlayers(playerCount);
+    current = 0;
+    gameOver = false;
+    winner = null;
+    phase = 'awaitRoll';
+    diceValue = 0;
+    moveLeft = 0;
+    selectedWeapon = 0;
+    log('游戏开始！按顺时针依次行动：' + players.map(p => p.name).join(' → '));
+    sfx('start');
     startTurn();
   };
 })();
