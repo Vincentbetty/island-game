@@ -292,9 +292,18 @@
   const ISLAND = '#6fbf73';     // 中央岛屿（挖矿概率中）
 
   // ---------- 版本与更新日志 ----------
-  const VERSION = '1.0.1';
+  const VERSION = '1.1.0';
   // 更新日志：每次更新请在最前面（数组顶部）新增一条记录
   const CHANGELOG = [
+    {
+      version: '1.1.0',
+      date: '2026-11-08',
+      title: '新增回血机制',
+      items: [
+        '商店新增「生命之泉」：8 万恢复 1 点生命值，最多到 10 点',
+        '每回合最多购买 3 次生命之泉',
+      ],
+    },
     {
       version: '1.0.1',
       date: '2026-11-08',
@@ -341,6 +350,7 @@
   ];
 
   const BREAD = { name: '面包', cost: 1, ap: 2 };  // 1万恢复2点行动力
+  const HEAL = { name: '生命之泉', cost: 8, hp: 1, max: 10, perTurn: 3 };  // 8万回1点生命，每回合限购3次
 
   // 四个出生地（四角，顺时针）：左上 → 右上 → 右下 → 左下
   // bx0/by0 ~ bx1/by1 为 3×3 出生地；出生点即水晶所在角落
@@ -361,7 +371,7 @@
       x: BASE_SPOTS[spotIdx].x, y: BASE_SPOTS[spotIdx].y,
       bx0: BASE_SPOTS[spotIdx].bx0, by0: BASE_SPOTS[spotIdx].by0,
       bx1: BASE_SPOTS[spotIdx].bx1, by1: BASE_SPOTS[spotIdx].by1,
-      money: 0, ap: 5, hp: 10, weapons: [0, 0, 0, 0], alive: true, takenTurn: false,
+      money: 0, ap: 5, hp: 10, weapons: [0, 0, 0, 0], alive: true, takenTurn: false, healBuys: 0,
       px: BASE_SPOTS[spotIdx].x * CELL + CELL / 2,
       py: BASE_SPOTS[spotIdx].y * CELL + CELL / 2,
       moving: false, legPhase: 0, mineAnim: 0,
@@ -532,6 +542,7 @@
     const p = players[current];
     if (p.takenTurn) p.ap += 1;   // 每回合自动获取 1 点行动力
     p.takenTurn = true;
+    p.healBuys = 0;
     diceValue = 0; moveLeft = 0; phase = 'awaitRoll'; selectedWeapon = 0;
     log(`—— <b>${p.name}</b> 的回合（每回合行动力 +1）——`);
     sfx('turn');
@@ -602,6 +613,21 @@
     log(`${p.name} 购买了 <b>面包</b>（-${BREAD.cost} 万，行动力 +${BREAD.ap}）`);
     sfx('buy');
     render();
+  }
+
+  function buyHeal() {
+    if (gameOver) return;
+    const p = players[current];
+    if (p.hp >= HEAL.max) { log('生命值已满，无需恢复'); return; }
+    if (p.healBuys >= HEAL.perTurn) { log(`每回合最多只能购买 ${HEAL.perTurn} 次生命之泉`); return; }
+    if (p.money < HEAL.cost) { log('货币不足'); return; }
+    p.money -= HEAL.cost;
+    p.healBuys++;
+    p.hp = Math.min(HEAL.max, p.hp + HEAL.hp);
+    log(`${p.name} 购买了 <b>生命之泉</b>（-${HEAL.cost} 万，生命 +${HEAL.hp}，当前 ${p.hp}/${HEAL.max}）`);
+    sfx('buy');
+    render();
+    openShop();   // 刷新商店，更新生命值与限购次数
   }
 
   function toggleAttack() {
@@ -999,6 +1025,18 @@
       <button class="btn" ${p.money < BREAD.cost ? 'disabled' : ''} onclick="window._buyB()">购买</button>
     `;
     list.appendChild(bread);
+    const heal = document.createElement('div');
+    heal.className = 'shop-item';
+    const healFull = p.hp >= HEAL.max;
+    const healLimit = p.healBuys >= HEAL.perTurn;
+    heal.innerHTML = `
+      <span class="name">生命之泉</span>
+      <span class="meta">恢复 1 点生命值（最多 ${HEAL.max}）· 每回合限购 ${HEAL.perTurn} 次</span>
+      <span class="owned">本回合已购 ${p.healBuys}/${HEAL.perTurn}</span>
+      <span class="cost">${HEAL.cost} 万</span>
+      <button class="btn" ${(p.money < HEAL.cost || healFull || healLimit) ? 'disabled' : ''} onclick="window._buyHeal()">购买</button>
+    `;
+    list.appendChild(heal);
     document.getElementById('buyModal').classList.remove('hidden');
   }
 
@@ -1042,6 +1080,7 @@
   // 暴露给内联 onclick
   window._buyW = buyWeapon;
   window._buyB = buyBread;
+  window._buyHeal = buyHeal;
 
   // 点击画布：移动 / 攻击
   canvas.addEventListener('click', e => {
