@@ -551,7 +551,7 @@
     document.getElementById('moveHint').textContent =
       (phase === 'awaitRoll') ? '尚未掷骰子'
       : (phase === 'acting') ? `剩余步数：${moveLeft}`
-      : (phase === 'attack') ? '攻击模式中';
+      : '攻击模式中';
     document.getElementById('rollBtn').disabled = (phase !== 'awaitRoll' || gameOver);
     document.getElementById('digBtn').disabled = (phase !== 'acting' || gameOver);
     document.getElementById('buyBtn').disabled = (phase !== 'acting' || gameOver);
