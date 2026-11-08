@@ -302,9 +302,17 @@
   const ISLAND = '#6fbf73';     // 中央岛屿（挖矿概率中）
 
   // ---------- 版本与更新日志 ----------
-  const VERSION = '1.2.0';
+  const VERSION = '1.2.1';
   // 更新日志：每次更新请在最前面（数组顶部）新增一条记录
   const CHANGELOG = [
+    {
+      version: '1.2.1',
+      date: '2026-11-08',
+      title: '下调大海挖掘概率',
+      items: [
+        '大海（海面）资源产出概率再降低 10%',
+      ],
+    },
     {
       version: '1.2.0',
       date: '2026-11-08',
@@ -440,7 +448,7 @@
     let find, weights; // 权重对应 [煤,铜,榴石,宝石,水晶,钻石]
     if (t === 'base')        { find = 0.85; weights = [10, 15, 20, 35, 12,  8]; }
     else if (t === 'island') { find = 0.65; weights = [25, 28, 15, 22,  7,  3]; }
-    else                     { find = 0.45; weights = [50, 26,  8, 12,  3,  1]; }
+    else                     { find = 0.35; weights = [50, 26,  8, 12,  3,  1]; }
     if (Math.random() > find) return null;
     const total = weights.reduce((a, b) => a + b, 0);
     let r = Math.random() * total;
